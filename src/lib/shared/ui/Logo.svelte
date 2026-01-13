@@ -8,7 +8,7 @@
 		text?: string;
 	}
 
-	const { size = 24, class: className = '', text = 'PUBLIC_ENV' }: Props = $props();
+	const { size = 24, class: className = '', text = 'TG Jobs' }: Props = $props();
 </script>
 
 <div class="flex size-9 items-center justify-center rounded-xl bg-primary text-white">

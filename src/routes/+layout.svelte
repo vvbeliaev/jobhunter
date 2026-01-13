@@ -16,6 +16,7 @@
 		Sidebar
 	} from '$lib';
 	import { userStore } from '$lib/apps/user';
+	import { jobsStore } from '$lib/apps/job';
 	import favicon from '$lib/shared/assets/favicon.svg';
 
 	import './layout.css';
@@ -47,8 +48,9 @@
 
 	// Global user load
 	$effect(() => {
-		globalPromise.then(({ userAuth }) => {
+		globalPromise.then(({ userAuth, jobs }) => {
 			if (userAuth) userStore.set(userAuth);
+			if (jobs) jobsStore.set(jobs);
 		});
 	});
 
@@ -57,8 +59,10 @@
 		const userId = userStore.user?.id;
 		if (!userId) return;
 		userStore.subscribe();
+		jobsStore.subscribe();
 		return () => {
 			userStore.unsubscribe();
+			jobsStore.unsubscribe();
 		};
 	});
 

@@ -16,3 +16,4 @@ services:
       - .env
     volumes:
       - ./pb/pb_data:/app/pb_data
+      - ./session.json:/app/session.json

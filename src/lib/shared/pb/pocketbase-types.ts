@@ -11,6 +11,7 @@ export enum Collections {
 	Mfas = "_mfas",
 	Otps = "_otps",
 	Superusers = "_superusers",
+	Jobs = "jobs",
 	Users = "users",
 }
 
@@ -92,11 +93,36 @@ export type SuperusersRecord = {
 	verified?: boolean
 }
 
-export type UsersRecord = {
+export type JobsRecord<Traw = unknown, Tskills = unknown> = {
+	channelId?: string
+	company?: string
+	created: IsoAutoDateString
+	currency?: string
+	description?: string
+	grade?: string
+	hash?: string
+	id: string
+	isRemote?: boolean
+	location?: string
+	messageId?: number
+	originalText: string
+	raw?: null | Traw
+	salaryMax?: number
+	salaryMin?: number
+	skills?: null | Tskills
+	title: string
+	updated?: IsoAutoDateString
+	url?: string
+	user?: RecordIdString
+}
+
+export type UsersRecord<Tcv = unknown> = {
 	avatar?: FileNameString
 	created: IsoAutoDateString
-	email: string
+	cv?: null | Tcv
+	email?: string
 	emailVisibility?: boolean
+	guest?: string
 	id: string
 	name?: string
 	password: string
@@ -111,7 +137,8 @@ export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRec
 export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemFields<Texpand>
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
-export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
+export type JobsResponse<Traw = unknown, Tskills = unknown, Texpand = unknown> = Required<JobsRecord<Traw, Tskills>> & BaseSystemFields<Texpand>
+export type UsersResponse<Tcv = unknown, Texpand = unknown> = Required<UsersRecord<Tcv>> & AuthSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
 
@@ -121,6 +148,7 @@ export type CollectionRecords = {
 	_mfas: MfasRecord
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
+	jobs: JobsRecord
 	users: UsersRecord
 }
 
@@ -130,6 +158,7 @@ export type CollectionResponses = {
 	_mfas: MfasResponse
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
+	jobs: JobsResponse
 	users: UsersResponse
 }
 

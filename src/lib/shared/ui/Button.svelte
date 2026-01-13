@@ -6,6 +6,7 @@
 		class?: ClassValue;
 		onclick?: (e: MouseEvent) => void;
 		href?: string;
+		loading?: boolean;
 		color?:
 			| 'primary'
 			| 'secondary'
@@ -42,6 +43,7 @@
 		square = false,
 		circle = false,
 		wide = false,
+		loading = false,
 		class: className = '',
 		target
 	}: Props = $props();
@@ -83,7 +85,7 @@
 			colorClasses[color],
 			variantClasses[variant],
 			sizeClasses[size],
-			disabled && 'btn-disabled',
+			(disabled || loading) && 'btn-disabled',
 			active && 'btn-active',
 			block && 'btn-block',
 			square && 'btn-square',
@@ -93,19 +95,22 @@
 		]}
 		{target}
 	>
+		{#if loading}
+			<span class="loading loading-spinner"></span>
+		{/if}
 		{@render children()}
 	</a>
 {:else}
 	<button
 		{type}
 		{onclick}
-		{disabled}
+		disabled={disabled || loading}
 		class={[
 			'btn',
 			colorClasses[color],
 			variantClasses[variant],
 			sizeClasses[size],
-			disabled && 'btn-disabled',
+			(disabled || loading) && 'btn-disabled',
 			active && 'btn-active',
 			block && 'btn-block',
 			square && 'btn-square',
@@ -114,6 +119,9 @@
 			className
 		]}
 	>
+		{#if loading}
+			<span class="loading loading-spinner"></span>
+		{/if}
 		{@render children()}
 	</button>
 {/if}

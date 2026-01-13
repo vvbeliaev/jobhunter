@@ -24,6 +24,8 @@ class UserStore {
 	async subscribe() {
 		if (!this.userId) return;
 
+		console.log('subscribe', this.userId);
+
 		return pb.collection(Collections.Users).subscribe(this.userId, (e) => {
 			switch (e.action) {
 				case 'update':

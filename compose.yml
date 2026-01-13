@@ -4,11 +4,15 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - PUBLIC_PB_URL=${PUBLIC_PB_URL:-PUBLIC_ENV}
+      - PUBLIC_PB_URL=${PUBLIC_PB_URL:-https://tgjobs.cogisoft.dev}
       - PUBLIC_POSTHOG_URL=${PUBLIC_POSTHOG_URL:-https://eu.i.posthog.com}
-      - PUBLIC_POSTHOG_TOKEN=${PUBLIC_POSTHOG_TOKEN:-PUBLIC_ENV}
+      - PUBLIC_POSTHOG_TOKEN=${PUBLIC_POSTHOG_TOKEN:-pub}
 
       - PB_EMAIL=${PB_EMAIL}
       - PB_PASSWORD=${PB_PASSWORD}
+
+      - TG_API_ID=${TG_API_ID}
+      - TG_API_HASH=${TG_APP_HASH}
     volumes:
       - ./pb/pb_data:/app/pb_data
+      - ./session.json:/app/session.json
