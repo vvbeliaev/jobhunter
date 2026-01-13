@@ -1,0 +1,6 @@
+---
+globs: *.go
+alwaysApply: false
+---
+
+All backend logic must be writen in pb/ directory (Golang Pocketbase Extension)

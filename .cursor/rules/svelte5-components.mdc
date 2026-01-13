@@ -1,0 +1,11 @@
+---
+description: 
+globs: *.svelte,*.svelte.ts
+alwaysApply: false
+---
+
+- use modern svelte 5 syntax
+- Use runes $state, $derived, $effect
+- Use classical html callback props, for example onclick NOT on:click (without ":")
+- modern $derived is mutable, use this property for forms/other state manipulation
+- Never use $effect for state management, only sideeffects

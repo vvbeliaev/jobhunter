@@ -1,0 +1,7 @@
+node_modules
+build
+.svelte-kit
+pb/pb_data
+.git
+.env
+
