@@ -107,6 +107,7 @@ export type JobsRecord<Traw = unknown, Tskills = unknown> = {
 	location?: string
 	messageId?: number
 	originalText: string
+	owner?: RecordIdString
 	raw?: null | Traw
 	salaryMax?: number
 	salaryMin?: number
