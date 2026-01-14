@@ -70,7 +70,6 @@ func NewKeywordFilter() *KeywordFilter {
 		blacklist: []string{
 			"реклама", "продам", "куплю", "скидка", "акция",
 			"casino", "казино", "betting", "ставки", "crypto pump",
-			"#resume", "#резюме", "#cv",
 		},
 		minLength: 50, // Job postings are usually longer than 50 chars
 	}
