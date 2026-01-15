@@ -6,8 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-
-	"svpb-tmpl/pkg/llm"
+	"unicode/utf8"
 
 	"github.com/gotd/td/tg"
 	"github.com/pocketbase/pocketbase/core"
@@ -17,26 +16,18 @@ import (
 // Handler processes incoming Telegram messages and saves jobs to PocketBase.
 type Handler struct {
 	app      core.App
-	analyzer *llm.Analyzer
 	logger   *zap.Logger
 	filter   *KeywordFilter
 	notifier func(ctx context.Context, text string) error
-	ownerID  string
 }
 
 // NewHandler creates a new message handler.
-func NewHandler(app core.App, analyzer *llm.Analyzer, logger *zap.Logger) *Handler {
+func NewHandler(app core.App, logger *zap.Logger) *Handler {
 	return &Handler{
-		app:      app,
-		analyzer: analyzer,
-		logger:   logger,
-		filter:   NewKeywordFilter(),
+		app:    app,
+		logger: logger,
+		filter: NewKeywordFilter(),
 	}
-}
-
-// SetOwnerID sets the default owner for new job records.
-func (h *Handler) SetOwnerID(ownerID string) {
-	h.ownerID = ownerID
 }
 
 // SetNotifier sets the notification function (e.g., to send to Saved Messages).
@@ -77,13 +68,13 @@ func NewKeywordFilter() *KeywordFilter {
 			"реклама", "продам", "куплю", "скидка", "акция",
 			"casino", "казино", "betting", "ставки", "crypto pump",
 		},
-		minLength: 50, // Job postings are usually longer than 50 chars
+		minLength: 100, // Job postings are usually longer than 100 runes
 	}
 }
 
 // ShouldProcess returns true if the message passes keyword filtering.
 func (f *KeywordFilter) ShouldProcess(text string) bool {
-	if len(text) < f.minLength {
+	if utf8.RuneCountInString(text) < f.minLength {
 		return false
 	}
 
@@ -120,7 +111,7 @@ func (h *Handler) HandleMessage(ctx context.Context, msg *tg.Message, channelID 
 	h.logger.Info("Processing potential job posting",
 		zap.Int64("channelId", channelID),
 		zap.Int("msgId", msg.ID),
-		zap.Int("textLength", len(text)),
+		zap.Int("runesCount", utf8.RuneCountInString(text)),
 	)
 
 	hash := h.calculateHash(text)
@@ -137,120 +128,22 @@ func (h *Handler) HandleMessage(ctx context.Context, msg *tg.Message, channelID 
 		return nil
 	}
 
-	parsed, err := h.analyzer.AnalyzeVacancy(ctx, text)
-	if err != nil {
-		h.logger.Error("LLM analysis failed",
+	// Save raw job - LLM analysis will be done in the OnRecordCreate hook
+	if err := h.saveRawJob(text, channelID, msg.ID, hash, msg); err != nil {
+		h.logger.Error("Failed to save raw job",
 			zap.Error(err),
-			zap.Int64("channelId", channelID),
-		)
-		return nil
-	}
-
-	// if !parsed.IsJob {
-	// 	h.logger.Debug("LLM determined not a job posting",
-	// 		zap.Int64("channelId", channelID),
-	// 		zap.Int("msgId", msg.ID),
-	// 	)
-	// 	return nil
-	// }
-
-	if !parsed.IsVacancy {
-		h.logger.Debug("LLM determined not a vacancy",
 			zap.Int64("channelId", channelID),
 			zap.Int("msgId", msg.ID),
 		)
 		return nil
 	}
 
-	// Fallback for empty title if LLM missed it
-	if parsed.Title == "" {
-		lines := strings.Split(text, "\n")
-		if len(lines) > 0 && len(lines[0]) > 0 {
-			parsed.Title = lines[0]
-			if len(parsed.Title) > 100 {
-				parsed.Title = parsed.Title[:97] + "..."
-			}
-		} else {
-			parsed.Title = "Untitled Vacancy"
-		}
-		h.logger.Warn("LLM returned empty title, using fallback",
-			zap.String("fallback_title", parsed.Title),
-			zap.Int64("channelId", channelID),
-		)
-	}
-
-	if err := h.saveJob(parsed, text, channelID, msg.ID, hash, msg); err != nil {
-		h.logger.Error("Failed to save job",
-			zap.Error(err),
-			zap.String("title", parsed.Title),
-		)
-		return nil
-	}
-
-	h.logger.Info("Job saved successfully",
-		zap.String("title", parsed.Title),
-		zap.String("company", parsed.Company),
-		zap.Int("salaryMin", parsed.SalaryMin),
-		zap.Int("salaryMax", parsed.SalaryMax),
+	h.logger.Info("Raw job saved successfully",
+		zap.Int64("channelId", channelID),
+		zap.Int("msgId", msg.ID),
 	)
 
-	// Send notification if notifier is set
-	if h.notifier != nil {
-		url := fmt.Sprintf("https://t.me/c/%d/%d", channelID, msg.ID)
-		notification := h.formatNotification(parsed, url)
-		if err := h.notifier(ctx, notification); err != nil {
-			h.logger.Error("Failed to send notification", zap.Error(err))
-		}
-	}
-
 	return nil
-}
-
-func (h *Handler) formatNotification(parsed llm.JobParsedData, url string) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🚀 НОВАЯ ВАКАНСИЯ: %s\n", strings.ToUpper(parsed.Title)))
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
-
-	if parsed.Company != "" {
-		sb.WriteString(fmt.Sprintf("🏢 Компания: %s\n", parsed.Company))
-	}
-
-	salary := ""
-	if parsed.SalaryMin > 0 || parsed.SalaryMax > 0 {
-		if parsed.SalaryMin > 0 && parsed.SalaryMax > 0 {
-			salary = fmt.Sprintf("%d — %d %s", parsed.SalaryMin, parsed.SalaryMax, parsed.Currency)
-		} else if parsed.SalaryMin > 0 {
-			salary = fmt.Sprintf("от %d %s", parsed.SalaryMin, parsed.Currency)
-		} else {
-			salary = fmt.Sprintf("до %d %s", parsed.SalaryMax, parsed.Currency)
-		}
-	}
-	if salary != "" {
-		sb.WriteString(fmt.Sprintf("💰 Зарплата: %s\n", salary))
-	}
-
-	if parsed.Grade != "" {
-		sb.WriteString(fmt.Sprintf("📊 Грейд: %s\n", parsed.Grade))
-	}
-
-	remoteStr := "Нет"
-	if parsed.IsRemote {
-		remoteStr = "Да ✅"
-	}
-	sb.WriteString(fmt.Sprintf("🌍 Удаленка: %s\n", remoteStr))
-
-	if len(parsed.Skills) > 0 {
-		sb.WriteString(fmt.Sprintf("🛠 Стек: %s\n", strings.Join(parsed.Skills, ", ")))
-	}
-
-	if parsed.Location != "" {
-		sb.WriteString(fmt.Sprintf("📍 Локация: %s\n", parsed.Location))
-	}
-
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
-	sb.WriteString(fmt.Sprintf("🔗 Ссылка: %s", url))
-
-	return sb.String()
 }
 
 func (h *Handler) checkDuplicate(channelID int64, msgID int, hash string) (bool, error) {
@@ -278,31 +171,33 @@ func (h *Handler) checkDuplicate(channelID int64, msgID int, hash string) (bool,
 	return len(records) > 0, nil
 }
 
-func (h *Handler) saveJob(parsed llm.JobParsedData, originalText string, channelID int64, msgID int, hash string, rawMsg *tg.Message) error {
+func (h *Handler) saveRawJob(originalText string, channelID int64, msgID int, hash string, rawMsg *tg.Message) error {
 	collection, err := h.app.FindCollectionByNameOrId("jobs")
 	if err != nil {
 		return fmt.Errorf("jobs collection not found: %w", err)
 	}
 
+	// Extract a preliminary title from first line for display purposes
+	title := "Pending Analysis"
+	lines := strings.Split(originalText, "\n")
+	if len(lines) > 0 && len(lines[0]) > 0 {
+		firstLine := lines[0]
+		if utf8.RuneCountInString(firstLine) > 100 {
+			runes := []rune(firstLine)
+			title = string(runes[:97]) + "..."
+		} else {
+			title = firstLine
+		}
+	}
+
 	record := core.NewRecord(collection)
-	record.Set("title", parsed.Title)
-	record.Set("company", parsed.Company)
-	record.Set("salaryMin", parsed.SalaryMin)
-	record.Set("salaryMax", parsed.SalaryMax)
-	record.Set("currency", parsed.Currency)
-	record.Set("grade", parsed.Grade)
-	record.Set("location", parsed.Location)
-	record.Set("isRemote", parsed.IsRemote)
-	record.Set("description", parsed.Description)
-	record.Set("skills", parsed.Skills)
+	record.Set("title", title)
 	record.Set("originalText", originalText)
 	record.Set("channelId", fmt.Sprintf("%d", channelID))
 	record.Set("messageId", msgID)
 	record.Set("hash", hash)
 	record.Set("raw", rawMsg)
-	if h.ownerID != "" {
-		record.Set("owner", h.ownerID)
-	}
+	record.Set("status", "raw")
 
 	url := fmt.Sprintf("https://t.me/c/%d/%d", channelID, msgID)
 	record.Set("url", url)

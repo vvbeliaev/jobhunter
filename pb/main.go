@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"os/signal"
@@ -54,6 +55,56 @@ func main() {
 			return nil
 		})
 
+		se.Router.POST("/api/jobs/{id}/generate-offer", func(e *core.RequestEvent) error {
+			authRecord := e.Auth
+			if authRecord == nil {
+				return e.ForbiddenError("Only authenticated users can generate offers", nil)
+			}
+
+			jobId := e.Request.PathValue("id")
+			job, err := app.FindRecordById("jobs", jobId)
+			if err != nil {
+				return e.NotFoundError("Job not found", nil)
+			}
+
+			cv := authRecord.Get("cv")
+			cvBytes, _ := json.Marshal(cv)
+
+			analyzer := llm.NewAnalyzer("", "")
+			offer, err := analyzer.GenerateOffer(e.Request.Context(), string(cvBytes), job.GetString("description")+"\n"+job.GetString("originalText"))
+			if err != nil {
+				return e.InternalServerError("Failed to generate offer", err)
+			}
+
+			// Find or create userJobMap
+			collection, err := app.FindCollectionByNameOrId("userJobMap")
+			if err != nil {
+				return e.InternalServerError("Collection not found", err)
+			}
+
+			userJob, err := app.FindFirstRecordByFilter("userJobMap", "user = {:userId} && job = {:jobId}", map[string]any{
+				"userId": authRecord.Id,
+				"jobId":  jobId,
+			})
+
+			if err != nil {
+				// Create new
+				userJob = core.NewRecord(collection)
+				userJob.Set("user", authRecord.Id)
+				userJob.Set("job", jobId)
+			}
+
+			userJob.Set("offer", offer)
+
+			if err := app.Save(userJob); err != nil {
+				return e.InternalServerError("Failed to save offer", err)
+			}
+
+			return e.JSON(200, map[string]any{
+				"offer": offer,
+			})
+		})
+
 		return se.Next()
 	})
 
@@ -62,6 +113,66 @@ func main() {
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		Automigrate: isGoRun,
 		Dir: "migrations",
+	})
+
+	// --- Job Processing Hook ---
+	// When a raw job is created, analyze it with LLM and create userJobMap for all users
+	app.OnRecordAfterCreateSuccess("jobs").BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+
+		// Only process raw jobs
+		if record.GetString("status") != "raw" {
+			return e.Next()
+		}
+
+		// Run LLM analysis in a goroutine to not block the request
+		go func() {
+			logger, _ := zap.NewProduction()
+			defer logger.Sync()
+
+			analyzer := llm.NewAnalyzer("", "")
+			originalText := record.GetString("originalText")
+
+			parsed, err := analyzer.AnalyzeVacancy(context.Background(), originalText)
+			if err != nil {
+				logger.Error("LLM analysis failed", zap.Error(err), zap.String("jobId", record.Id))
+				return
+			}
+
+			if !parsed.IsVacancy {
+				logger.Info("LLM determined not a vacancy, deleting", zap.String("jobId", record.Id))
+				// if err := app.Delete(record); err != nil {
+				// 	logger.Error("Failed to delete non-vacancy job", zap.Error(err))
+				// }
+				return
+			}
+
+			// Update job with parsed data
+			
+			record.Set("title", parsed.Title)
+			record.Set("company", parsed.Company)
+			record.Set("salaryMin", parsed.SalaryMin)
+			record.Set("salaryMax", parsed.SalaryMax)
+			record.Set("currency", parsed.Currency)
+			record.Set("grade", parsed.Grade)
+			record.Set("location", parsed.Location)
+			record.Set("isRemote", parsed.IsRemote)
+			record.Set("description", parsed.Description)
+			record.Set("skills", parsed.Skills)
+			record.Set("status", "processed")
+
+			if err := app.Save(record); err != nil {
+				logger.Error("Failed to update job with parsed data", zap.Error(err))
+				return
+			}
+
+			logger.Info("Job parsed successfully",
+				zap.String("jobId", record.Id),
+				zap.String("title", parsed.Title),
+			)
+		}()
+
+		return e.Next()
 	})
 
 	// --- Telegram Integration ---
@@ -122,22 +233,8 @@ func startTelegramParser(app *pocketbase.PocketBase, cfg parser.Config) {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Find the admin user (where guest is empty) to set as owner of new jobs
-	ownerID := ""
-	users, err := app.FindRecordsByFilter("users", "guest = ''", "created", 1, 0)
-	if err == nil && len(users) > 0 {
-		ownerID = users[0].Id
-		logger.Info("Found admin user for job ownership", zap.String("id", ownerID))
-	} else {
-		logger.Warn("Could not find admin user (guest = '') for job ownership")
-	}
-
-	// Create analyzer and handler
-	analyzer := llm.NewAnalyzer("", "")
-	handler := parser.NewHandler(app, analyzer, logger)
-	if ownerID != "" {
-		handler.SetOwnerID(ownerID)
-	}
+	// Create handler (LLM analysis is now done in the OnRecordCreate hook)
+	handler := parser.NewHandler(app, logger)
 
 	tg := parser.NewClient(cfg, logger)
 	handler.SetNotifier(tg.SendMessageToSelf)

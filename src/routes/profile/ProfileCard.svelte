@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { userStore, userApi } from '$lib/apps/user';
-	import { ThemeController, Button, Input } from '$lib';
-	import { Camera, Edit2, Check, X } from 'lucide-svelte';
+	import { ThemeController, Button, Input, Textarea } from '$lib';
+	import { Camera, Edit2, Check, X, FileText, Save } from 'lucide-svelte';
 
 	const user = $derived(userStore.user);
 	const avatarUrl = $derived(userStore.avatarUrl);
@@ -10,6 +10,24 @@
 	let editedName = $state('');
 	let isUploadingAvatar = $state(false);
 	let fileInput: HTMLInputElement | null = $state(null);
+
+	let cvJson = $derived(user?.cv ? JSON.stringify(user.cv, null, 2) : '');
+	let isSavingCv = $state(false);
+
+	async function saveCv() {
+		try {
+			isSavingCv = true;
+			let parsedCv = null;
+			if (cvJson.trim()) {
+				parsedCv = JSON.parse(cvJson);
+			}
+			await userApi.updateProfile({ cv: parsedCv });
+		} catch (err) {
+			console.error('Failed to update CV:', err);
+		} finally {
+			isSavingCv = false;
+		}
+	}
 
 	function startEditingName() {
 		editedName = user?.name || '';
@@ -130,6 +148,35 @@
 					{/if}
 				</div>
 			</div>
+		</div>
+
+		<div class="divider"></div>
+
+		<div class="space-y-4">
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<FileText size={18} class="text-primary" />
+					<h3 class="font-bold">CV JSON</h3>
+				</div>
+				<Button size="sm" onclick={saveCv} disabled={isSavingCv} color="primary">
+					{#if isSavingCv}
+						<span class="loading loading-xs loading-spinner"></span>
+					{:else}
+						<Save size={14} class="mr-1" />
+					{/if}
+					Save CV
+				</Button>
+			</div>
+
+			<Textarea
+				placeholder="Paste your CV as JSON here..."
+				bind:value={cvJson}
+				rows={10}
+				class="font-mono text-xs"
+			/>
+			<p class="text-xs text-base-content/50">
+				This JSON will be used by AI to generate personalized offers for jobs.
+			</p>
 		</div>
 	</div>
 </div>

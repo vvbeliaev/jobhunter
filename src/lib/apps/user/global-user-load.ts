@@ -9,7 +9,8 @@ export async function globalUserLoad() {
 	if (!pb.authStore.isValid) {
 		try {
 			const userAuth = await authGuest();
-			return { userAuth, jobs: [] };
+			const jobs = await jobsStore.load(userAuth.record.id);
+			return { userAuth, jobs };
 		} catch (error) {
 			console.error(error);
 			pb.authStore.clear();
@@ -19,7 +20,7 @@ export async function globalUserLoad() {
 
 	try {
 		const userAuth = await userStore.load();
-		const jobs = await jobsStore.load();
+		const jobs = await jobsStore.load(userAuth.record.id);
 		return { userAuth, jobs };
 	} catch (error) {
 		console.error(error);

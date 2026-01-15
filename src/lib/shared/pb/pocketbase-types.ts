@@ -12,6 +12,7 @@ export enum Collections {
 	Otps = "_otps",
 	Superusers = "_superusers",
 	Jobs = "jobs",
+	UserJobMap = "userJobMap",
 	Users = "users",
 }
 
@@ -93,8 +94,11 @@ export type SuperusersRecord = {
 	verified?: boolean
 }
 
+export enum JobsStatusOptions {
+	"raw" = "raw",
+	"processed" = "processed",
+}
 export type JobsRecord<Traw = unknown, Tskills = unknown> = {
-	archived?: IsoDateString
 	channelId?: string
 	company?: string
 	created: IsoAutoDateString
@@ -107,14 +111,24 @@ export type JobsRecord<Traw = unknown, Tskills = unknown> = {
 	location?: string
 	messageId?: number
 	originalText: string
-	owner?: RecordIdString
 	raw?: null | Traw
 	salaryMax?: number
 	salaryMin?: number
 	skills?: null | Tskills
+	status?: JobsStatusOptions
 	title: string
 	updated?: IsoAutoDateString
 	url?: string
+}
+
+export type UserJobMapRecord = {
+	archived?: IsoDateString
+	created: IsoAutoDateString
+	id: string
+	job?: RecordIdString
+	offer?: string
+	updated: IsoAutoDateString
+	user?: RecordIdString
 }
 
 export type UsersRecord<Tcv = unknown> = {
@@ -139,6 +153,7 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type JobsResponse<Traw = unknown, Tskills = unknown, Texpand = unknown> = Required<JobsRecord<Traw, Tskills>> & BaseSystemFields<Texpand>
+export type UserJobMapResponse<Texpand = unknown> = Required<UserJobMapRecord> & BaseSystemFields<Texpand>
 export type UsersResponse<Tcv = unknown, Texpand = unknown> = Required<UsersRecord<Tcv>> & AuthSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
@@ -150,6 +165,7 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	jobs: JobsRecord
+	userJobMap: UserJobMapRecord
 	users: UsersRecord
 }
 
@@ -160,6 +176,7 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	jobs: JobsResponse
+	userJobMap: UserJobMapResponse
 	users: UsersResponse
 }
 
